@@ -1,0 +1,6 @@
+- id: call-tree-order
+  name: call-tree-order
+  description: Each Python function sits below its last caller.
+  entry: call-tree-order
+  language: python
+  types: [python]

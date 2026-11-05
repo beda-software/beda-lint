@@ -1,0 +1,29 @@
+[project]
+name = "beda-lint"
+version = "0.1.0"
+description = "Custom lint checks for Beda Software projects"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+call-tree-order = "beda_lint.call_tree_order:main"
+
+[dependency-groups]
+dev = ["mypy", "pytest", "ruff"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["I", "E", "F", "N", "B", "C4", "PT", "UP", "RET", "RUF", "SIM", "PL", "ANN"]
+per-file-ignores = { "beda_lint/**/*.py" = ["T201"], "tests/**/*.py" = ["PLR2004"] }
+
+[tool.mypy]
+files = ["beda_lint", "tests"]
+check_untyped_defs = true
