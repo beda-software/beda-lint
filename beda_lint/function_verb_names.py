@@ -19,7 +19,7 @@ CONFIG_TABLE = "function-verb-names"
 CONFIG_KEYS = frozenset(
     {"extra-verbs", "extra-predicate-prefixes", "ignore-decorators", "ignore-patterns"}
 )
-PREDICATE_PREFIXES = frozenset({"is", "are", "has", "have", "can", "should"})
+PREDICATE_PREFIXES = frozenset({"is", "are", "has", "have", "can", "should", "does"})
 EXEMPT_NAMES = frozenset({"main"})
 DEFAULT_IGNORE_PATTERNS = ("*_op",)
 EXEMPT_DECORATORS = frozenset(
@@ -42,7 +42,7 @@ BOOL_FUNCTIONS = frozenset(
     {"bool", "isinstance", "issubclass", "hasattr", "callable", "any", "all", "startswith",
      "endswith", "isdigit", "isalpha", "exists", "is_file", "is_dir"}
 )  # fmt: skip
-WORD_BOUNDARY = re.compile(r"_|(?=[A-Z])")
+WORD_BOUNDARY = re.compile(r"_|(?<=[a-z0-9])(?=[A-Z])")
 
 FunctionDef = ast.FunctionDef | ast.AsyncFunctionDef
 
@@ -76,7 +76,10 @@ def _fetch_config_table(pyproject: Path) -> dict[str, object]:
         return {}
 
     table = tomllib.loads(pyproject.read_text()).get("tool", {}).get("beda-lint", {})
-    table = table.get(CONFIG_TABLE, {})
+    table = table.get(CONFIG_TABLE, {}) if isinstance(table, dict) else table
+    if not isinstance(table, dict):
+        sys.exit(f"{pyproject}: [tool.beda-lint.{CONFIG_TABLE}] must be a table")
+
     unknown = set(table) - CONFIG_KEYS
     if unknown:
         sys.exit(f"{pyproject}: unknown [tool.beda-lint.{CONFIG_TABLE}] keys: {sorted(unknown)}")
@@ -122,7 +125,7 @@ def check_function_names(tree: ast.Module, path: Path, config: NamingConfig) -> 
                         f"such as `matches_`",
                     )
                 )
-        elif stem not in config.verbs and not is_predicate(stem, config):
+        elif stem not in config.verbs and stem not in config.predicate_prefixes:
             findings.append(
                 Finding(
                     path,
@@ -137,7 +140,7 @@ def check_function_names(tree: ast.Module, path: Path, config: NamingConfig) -> 
 
 
 def _collect_aiohttp_lifecycle_hooks(tree: ast.Module) -> set[str]:
-    """Functions this module registers on an app signal: `app.cleanup_ctx.append(db)`."""
+    """Functions this module registers on an app signal: `app.cleanup_ctx.append(db)`, `+= [db]`."""
     hooks: set[str] = set()
     for node in ast.walk(tree):
         if (
@@ -147,9 +150,19 @@ def _collect_aiohttp_lifecycle_hooks(tree: ast.Module) -> set[str]:
             and node.func.value.attr in AIOHTTP_APP_SIGNALS
         ):
             for argument in node.args:
-                items = argument.elts if isinstance(argument, ast.List | ast.Tuple) else [argument]
-                hooks.update(item.id for item in items if isinstance(item, ast.Name))
+                hooks |= _collect_names(argument)
+        elif (
+            isinstance(node, ast.AugAssign)
+            and isinstance(node.target, ast.Attribute)
+            and node.target.attr in AIOHTTP_APP_SIGNALS
+        ):
+            hooks |= _collect_names(node.value)
     return hooks
+
+
+def _collect_names(node: ast.expr) -> set[str]:
+    items = node.elts if isinstance(node, ast.List | ast.Tuple) else [node]
+    return {item.id for item in items if isinstance(item, ast.Name)}
 
 
 def _iterate_functions(nodes: Sequence[ast.AST], prefix: str) -> Iterator[tuple[str, FunctionDef]]:
@@ -163,11 +176,6 @@ def _iterate_functions(nodes: Sequence[ast.AST], prefix: str) -> Iterator[tuple[
             yield from _iterate_functions(node.body, f"{prefix}{node.name}.")
         else:
             yield from _iterate_functions(list(ast.iter_child_nodes(node)), prefix)
-
-
-def get_stem(name: str) -> str:
-    """First word of a snake_case or camelCase name, lowercased, ignoring leading underscores."""
-    return WORD_BOUNDARY.split(name.lstrip("_"))[0].lower()
 
 
 def _is_exempt(func: FunctionDef, config: NamingConfig) -> bool:
@@ -202,11 +210,15 @@ def _has_bool_return(func: FunctionDef) -> bool:
 
     returns = func.returns
     if isinstance(returns, ast.Constant) and isinstance(returns.value, str):
-        returns = ast.parse(returns.value, mode="eval").body
-    if isinstance(returns, ast.Subscript):
-        return _get_type_name(returns.value) in BOOL_GUARD_TYPES
+        try:
+            returns = ast.parse(returns.value.strip(), mode="eval").body
+        except SyntaxError:
+            return False
 
-    return returns is not None and _get_type_name(returns) == "bool"
+    if isinstance(returns, ast.Subscript):
+        return _get_short_name(returns.value) in BOOL_GUARD_TYPES
+
+    return _get_short_name(returns) == "bool"
 
 
 def _iterate_own_returns(nodes: Sequence[ast.AST]) -> Iterator[ast.Return]:
@@ -232,13 +244,20 @@ def _is_bool_expression(node: ast.expr) -> bool:
         return all(_is_bool_expression(value) for value in node.values)
 
     if isinstance(node, ast.Call):
-        return _get_type_name(node.func) in BOOL_FUNCTIONS
+        name = _get_short_name(node.func)
+        return name in BOOL_FUNCTIONS or get_stem(name) in PREDICATE_PREFIXES
 
     return False
 
 
-def _get_type_name(node: ast.expr) -> str:
+def _get_short_name(node: ast.expr) -> str:
+    """Last segment of a dotted name: `typing.TypeGuard` gives `TypeGuard`."""
     return node.attr if isinstance(node, ast.Attribute) else ast.unparse(node)
+
+
+def get_stem(name: str) -> str:
+    """First word of a snake_case or camelCase name, lowercased, ignoring leading underscores."""
+    return WORD_BOUNDARY.split(name.lstrip("_"))[0].lower()
 
 
 def is_predicate(stem: str, config: NamingConfig) -> bool:

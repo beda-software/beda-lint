@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from beda_lint.function_verb_names import (
+    PREDICATE_PREFIXES,
     NamingConfig,
     check_function_names,
     fetch_config,
@@ -15,7 +16,7 @@ from beda_lint.function_verb_names import (
 
 DEFAULT_CONFIG = NamingConfig(
     verbs=fetch_default_verbs(),
-    predicate_prefixes=frozenset({"is", "are", "has", "have", "can", "should"}),
+    predicate_prefixes=PREDICATE_PREFIXES,
     ignore_decorators=frozenset(),
     ignore_patterns=(),
 )
@@ -30,6 +31,8 @@ DEFAULT_CONFIG = NamingConfig(
         ("setUp", "set"),
         ("assertEqual", "assert"),
         ("sync", "sync"),
+        ("Total", "total"),
+        ("HTTPThing", "httpthing"),
     ],
 )
 def test_get_stem__takes_the_first_word_of_snake_and_camel_case(name: str, stem: str) -> None:
@@ -42,6 +45,11 @@ def test_check_function_names__accepts_a_name_starting_with_a_verb() -> None:
 
 def test_check_function_names__flags_a_name_starting_with_a_noun() -> None:
     assert check_source("def patient_data(): ...") == [("NAME001", "patient_data")]
+
+
+@pytest.mark.parametrize("name", ["records", "updates_for_patient", "Total"])
+def test_check_function_names__flags_plural_and_capitalized_nouns(name: str) -> None:
+    assert check_source(f"def {name}(): ...") == [("NAME001", name)]
 
 
 def test_check_function_names__names_a_method_with_its_class() -> None:
@@ -77,6 +85,7 @@ def test_check_function_names__checks_functions_inside_if_blocks() -> None:
         "def matches_requirement() -> bool: ...",
         "def applies() -> bool: ...",
         "def belongs_to_program() -> bool: ...",
+        "def does_exist() -> bool: ...",
         "def is_ready() -> 'bool': ...",
         "def is_patient(x) -> TypeGuard[Patient]: ...",
     ],
@@ -91,6 +100,7 @@ def test_check_function_names__accepts_a_predicate_name_for_a_bool_function(sour
         "def record_satisfier() -> bool: ...",
         "def ready() -> bool: ...",
         "def check_patient(x) -> typing.TypeGuard[Patient]: ...",
+        "def check_ready() -> ' bool': ...",
     ],
 )
 def test_check_function_names__flags_a_bool_function_without_a_predicate_name(
@@ -103,6 +113,10 @@ def test_check_function_names__accepts_a_predicate_name_without_a_bool_annotatio
     assert check_source("def is_closed(task): ...") == []
 
 
+def test_check_function_names__skips_a_string_annotation_that_is_not_valid_python() -> None:
+    assert check_source("def fetch_task() -> 'not valid(': ...") == []
+
+
 @pytest.mark.parametrize(
     "body",
     [
@@ -111,6 +125,7 @@ def test_check_function_names__accepts_a_predicate_name_without_a_bool_annotatio
         "return not task.done",
         "return isinstance(task, Task) and task.id is not None",
         "return any(t.done for t in tasks)",
+        "return self._is_valid(task)",
         "if task:\n        return False\n    return True",
     ],
 )
@@ -188,12 +203,15 @@ def test_check_function_names__exempts_aiohttp_lifecycle_hooks_registered_in_the
 
         async def warmup(app): ...
 
+        async def heartbeat(app): ...
+
         async def settings(app): ...
 
         def create_app():
             app.cleanup_ctx.append(db)
             app.cleanup_ctx.extend([twilio])
             app.on_startup.append(warmup)
+            app.on_startup += [heartbeat]
     """
     assert check_source(source) == [("NAME001", "settings")]
 
@@ -205,11 +223,13 @@ def test_main__skips_a_finding_with_a_noqa_comment_for_its_code(
         "def patient_data(): ...  # noqa: NAME001\n"
         "def invoice_total(): ...  # noqa: E501, NAME001 legacy name\n"
         "def order_total(): ...  # noqa: ORDER001\n"
+        "def cart_total(): ...  # noqa: E501 see NAME001\n"
     )
     monkeypatch.chdir(tmp_path)
     exit_code = main(["mod.py"])
     assert exit_code == 1
-    assert capsys.readouterr().out.startswith("mod.py:3: NAME001 `order_total`")
+    output = capsys.readouterr().out
+    assert [line.split(" ")[0] for line in output.splitlines()] == ["mod.py:3:", "mod.py:4:"]
 
 
 def test_fetch_config__extends_the_defaults_from_pyproject(tmp_path: Path) -> None:
@@ -219,34 +239,37 @@ def test_fetch_config__extends_the_defaults_from_pyproject(tmp_path: Path) -> No
         'extra-verbs = ["Reconcile2"]\n'
         'extra-predicate-prefixes = ["needs"]\n'
         'ignore-decorators = ["sdk.operation"]\n'
-        'ignore-patterns = ["*_op"]\n'
+        'ignore-patterns = ["m_*"]\n'
     )
     config = fetch_config(pyproject)
     assert "reconcile2" in config.verbs
     assert "fetch" in config.verbs
     assert {"is", "needs"} <= config.predicate_prefixes
     assert config.ignore_decorators == frozenset({"sdk.operation"})
-    assert config.ignore_patterns == ("*_op", "*_op")
+    assert {"*_op", "m_*"} <= set(config.ignore_patterns)
 
 
-def test_fetch_config__uses_the_defaults_without_a_pyproject(tmp_path: Path) -> None:
-    config = fetch_config(tmp_path / "pyproject.toml")
-    assert config.verbs == fetch_default_verbs()
-    assert config.ignore_patterns == ("*_op",)
+def test_main__checks_with_built_in_defaults_without_a_pyproject(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "mod.py").write_text("def fetch_rows(): ...\ndef patient_reset_op(): ...\n")
+    monkeypatch.chdir(tmp_path)
+    assert main(["mod.py"]) == 0
 
 
 @pytest.mark.parametrize(
-    "table",
+    "pyproject_text",
     [
-        'extra-verb = ["sync"]',
-        'extra-verbs = "sync"',
+        '[tool.beda-lint.function-verb-names]\nextra-verb = ["sync"]\n',
+        '[tool.beda-lint.function-verb-names]\nextra-verbs = "sync"\n',
+        '[tool]\nbeda-lint = "on"\n',
     ],
 )
-def test_fetch_config__rejects_an_unknown_key_or_a_non_list_value(
-    tmp_path: Path, table: str
+def test_fetch_config__rejects_an_unknown_key_a_non_list_value_or_a_non_table(
+    tmp_path: Path, pyproject_text: str
 ) -> None:
     pyproject = tmp_path / "pyproject.toml"
-    pyproject.write_text(f"[tool.beda-lint.function-verb-names]\n{table}\n")
+    pyproject.write_text(pyproject_text)
     with pytest.raises(SystemExit):
         fetch_config(pyproject)
 
@@ -254,9 +277,9 @@ def test_fetch_config__rejects_an_unknown_key_or_a_non_list_value(
 def test_main__reads_the_config_from_the_working_directory(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    (tmp_path / "mod.py").write_text("def reconcile_rows(): ...\ndef patient_data(): ...\n")
+    (tmp_path / "mod.py").write_text("def rehydrate_rows(): ...\ndef patient_data(): ...\n")
     (tmp_path / "pyproject.toml").write_text(
-        '[tool.beda-lint.function-verb-names]\nextra-verbs = ["reconcile"]\n'
+        '[tool.beda-lint.function-verb-names]\nextra-verbs = ["rehydrate"]\n'
     )
     monkeypatch.chdir(tmp_path)
     exit_code = main(["mod.py"])

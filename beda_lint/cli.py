@@ -7,7 +7,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-NOQA = re.compile(r"#\s*noqa:\s*(?P<codes>[\w\s,]+)", re.IGNORECASE)
+NOQA = re.compile(r"#\s*noqa:\s*(?P<codes>[A-Z]+[0-9]+(?:[\s,]+[A-Z]+[0-9]+)*)", re.IGNORECASE)
 NOQA_CODE_SEPARATOR = re.compile(r"[\s,]+")
 
 
@@ -41,7 +41,7 @@ def run_check(check_tree: CheckTree, description: str | None, argv: Sequence[str
     if args.update_baseline:
         return write_baseline(args.baseline, findings)
 
-    return report(findings, read_baseline(args.baseline) if args.baseline else set())
+    return report(findings, fetch_baseline(args.baseline) if args.baseline else set())
 
 
 def parse_args(description: str | None, argv: Sequence[str] | None) -> argparse.Namespace:
@@ -85,7 +85,7 @@ def check_file(path: Path, check_tree: CheckTree) -> list[Finding]:
 
 def _is_suppressed(finding: Finding, lines: list[str]) -> bool:
     """A `# noqa: CODE` comment on the finding's line, as ruff reads it."""
-    match = NOQA.search(lines[finding.line - 1]) if finding.line <= len(lines) else None
+    match = NOQA.search(lines[finding.line - 1])
     return match is not None and finding.code in NOQA_CODE_SEPARATOR.split(match["codes"])
 
 
@@ -96,7 +96,7 @@ def write_baseline(baseline: Path, findings: Iterable[Finding]) -> int:
     return 0
 
 
-def read_baseline(baseline: Path) -> set[str]:
+def fetch_baseline(baseline: Path) -> set[str]:
     if not baseline.exists():
         return set()
 

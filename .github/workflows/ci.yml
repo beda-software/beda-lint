@@ -21,5 +21,5 @@ jobs:
       - run: uv run ruff check .
       - run: uv run mypy
       - run: uv run pytest
-      - run: uv run call-tree-order beda_lint
-      - run: uv run function-verb-names beda_lint
+      - run: uv run call-tree-order beda_lint tests
+      - run: uv run function-verb-names beda_lint tests

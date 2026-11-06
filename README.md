@@ -1,7 +1,8 @@
 # beda-lint
 
 Custom lint checks for Beda Software projects — the conventions ruff and mypy don't cover. Each check is a
-standalone command and a [pre-commit](https://pre-commit.com) hook; pick the ones a project wants.
+standalone command and a [pre-commit](https://pre-commit.com) hook; pick the ones a project wants. Requires
+Python 3.11+ (the checks read their config with `tomllib`); the checked code can target any Python 3 version.
 
 | Hook / command | Language | What it checks |
 | --- | --- | --- |
@@ -107,16 +108,20 @@ app/billing.py:30: NAME002 `check_paid` returns bool, so name it as a statement 
 
 How a name is read:
 
-- The first word counts, after leading underscores, split on `_` or camelCase: `_fetch_x` → `fetch`, `setUp` → `set`.
+- The first word counts, after leading underscores, split on `_` or camelCase: `_fetch_x` → `fetch`, `setUp` → `set`,
+  `Total` → `total`.
 - **NAME001**: the first word must be in the verb list — the built-in [`verbs.txt`](beda_lint/verbs.txt) plus
-  `extra-verbs`. A predicate-style first word (`is_`, `matches_`) also passes.
+  `extra-verbs` — or a predicate prefix (`is_`, `has_`, ...). A third-person form (`matches_`, `records`) passes only
+  on a bool function, so a plural noun like `records()` is still flagged.
 - **NAME002**: a function returns bool when it is annotated `-> bool`, `TypeGuard[...]` or `TypeIs[...]`, or — without
-  an annotation — when every `return` gives `True`/`False`, a comparison, `not …`, `and`/`or` of those, or a call such
-  as `isinstance`, `any`, `all`, `bool`. Its first word must be `is`, `are`, `has`, `have`, `can`, `should`, an
-  `extra-predicate-prefixes` entry, or the third-person form of a listed verb (`matches`, `applies`, `belongs`).
+  an annotation — when every `return` gives `True`/`False`, a comparison, `not …`, `and`/`or` of those, a call such
+  as `isinstance`, `any`, `all`, `bool`, or a call to a predicate-named function (`self._is_valid()`). Its first word
+  must be `is`, `are`, `has`, `have`, `can`, `should`, `does`, an `extra-predicate-prefixes` entry, or the
+  third-person form of a listed verb (`matches`, `applies`, `belongs`).
 - Exempt: dunder methods, `main`, `@property` and its setter/getter/deleter, `@cached_property`, `@overload` stubs,
-  `@pytest.fixture` functions, names matching `*_op` (Aidbox operations), and aiohttp lifecycle hooks the same module
-  registers — `app.cleanup_ctx.append(db)`, `app.on_startup.append(...)` and the other app signals. `test_*` passes
+  `@pytest.fixture` functions, names matching `*_op` (Aidbox operations), and aiohttp lifecycle hooks registered in
+  the same module — `app.cleanup_ctx.append(db)`, `app.on_startup += [warmup]` and the other app signals. A hook
+  registered from another module is not seen; list it in `ignore-patterns` or add `# noqa: NAME001`. `test_*` passes
   because `test` is a verb.
 
 ### Configuration
@@ -126,7 +131,7 @@ Optional, in the `pyproject.toml` of the folder the check runs from:
 ```toml
 [tool.beda-lint.function-verb-names]
 # Verbs specific to the project, added to the built-in list.
-extra-verbs = ["reconcile", "repull"]
+extra-verbs = ["rehydrate", "debit"]
 # Extra bool-name prefixes, besides is/are/has/have/can/should and third-person verbs.
 extra-predicate-prefixes = ["needs"]
 # Decorated functions named by framework convention.

@@ -59,6 +59,7 @@ count
 create
 debounce
 decode
+decorate
 decrypt
 dedupe
 deduplicate
@@ -216,7 +217,6 @@ repeat
 replace
 replay
 report
-repull
 request
 require
 rerun
