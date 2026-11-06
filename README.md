@@ -6,6 +6,7 @@ standalone command and a [pre-commit](https://pre-commit.com) hook; pick the one
 | Hook / command | Language | What it checks |
 | --- | --- | --- |
 | `call-tree-order` | Python | Each function sits below its last caller (`ORDER001`) |
+| `function-verb-names` | Python | Function names start with a verb (`NAME001`); bool functions read as predicates (`NAME002`) |
 
 ## call-tree-order
 
@@ -91,6 +92,86 @@ How entries match:
 - A new violation in a baselined file still fails, and so does a baselined function once it is renamed or its file
   moves.
 - Paths are relative to the working directory, so create and check the baseline from the same folder.
+
+## function-verb-names
+
+A function does something, so its name starts with what it does: `fetch_patient`, `_build_payload`, `sync`. A
+function returning `bool` answers a question about its argument, so its name reads as a statement: `is_closed`,
+`has_slots`, `should_retry`, `matches_requirement`. An imperative name on a bool function (`record_satisfier() -> bool`)
+promises an action it does not take.
+
+```
+app/billing.py:12: NAME001 `invoice_total` does not start with a verb; name it for what it does (`fetch_`, `build_`, ...) or add `invoice` to extra-verbs
+app/billing.py:30: NAME002 `check_paid` returns bool, so name it as a statement about its argument: `is_`, `has_`, `should_`, `can_`, or a third-person verb such as `matches_`
+```
+
+How a name is read:
+
+- The first word counts, after leading underscores, split on `_` or camelCase: `_fetch_x` → `fetch`, `setUp` → `set`.
+- **NAME001**: the first word must be in the verb list — the built-in [`verbs.txt`](beda_lint/verbs.txt) plus
+  `extra-verbs`. A predicate-style first word (`is_`, `matches_`) also passes.
+- **NAME002**: a function returns bool when it is annotated `-> bool`, `TypeGuard[...]` or `TypeIs[...]`, or — without
+  an annotation — when every `return` gives `True`/`False`, a comparison, `not …`, `and`/`or` of those, or a call such
+  as `isinstance`, `any`, `all`, `bool`. Its first word must be `is`, `are`, `has`, `have`, `can`, `should`, an
+  `extra-predicate-prefixes` entry, or the third-person form of a listed verb (`matches`, `applies`, `belongs`).
+- Exempt: dunder methods, `main`, `@property` and its setter/getter/deleter, `@cached_property`, `@overload` stubs,
+  `@pytest.fixture` functions, names matching `*_op` (Aidbox operations), and aiohttp lifecycle hooks the same module
+  registers — `app.cleanup_ctx.append(db)`, `app.on_startup.append(...)` and the other app signals. `test_*` passes
+  because `test` is a verb.
+
+### Configuration
+
+Optional, in the `pyproject.toml` of the folder the check runs from:
+
+```toml
+[tool.beda-lint.function-verb-names]
+# Verbs specific to the project, added to the built-in list.
+extra-verbs = ["reconcile", "repull"]
+# Extra bool-name prefixes, besides is/are/has/have/can/should and third-person verbs.
+extra-predicate-prefixes = ["needs"]
+# Decorated functions named by framework convention.
+ignore-decorators = ["sdk.operation", "sdk.subscription"]
+# Shell-style globs over the full function name.
+ignore-patterns = ["m_*", "action_*", "*_op", "*_handler"]
+```
+
+An unknown key or a non-list value stops the run with an error, so a typo never silently disables a setting. A verb
+missing from the built-in list that most projects would use belongs in `verbs.txt` — open a PR.
+
+### Use
+
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/beda-software/beda-lint
+    rev: main
+    hooks:
+      - id: function-verb-names
+        args: [--baseline, lint/names-baseline.txt]
+```
+
+```bash
+uvx --from git+https://github.com/beda-software/beda-lint function-verb-names src tests
+```
+
+The baseline works as for `call-tree-order`: entries are `path::Class.function`, so see
+[Adopting it in a legacy project](#adopting-it-in-a-legacy-project) — use a separate baseline file per check.
+
+## Suppressing one finding
+
+Every check honours `# noqa: CODE` on the line it reports — the `def` line, not a decorator line:
+
+```python
+def dt(time_str: str) -> datetime:  # noqa: NAME001 — short on purpose, used in test tables
+```
+
+Several codes can share one comment with ruff's: `# noqa: E501, NAME001`. With ruff's `RUF100` (unused `noqa`)
+enabled, tell ruff these codes are external so it keeps them:
+
+```toml
+[tool.ruff.lint]
+external = ["NAME", "ORDER"]
+```
 
 ## Development
 
