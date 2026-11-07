@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -21,4 +21,5 @@ jobs:
       - run: uv run ruff check .
       - run: uv run mypy
       - run: uv run pytest
-      - run: uv run call-tree-order beda_lint
+      - run: uv run call-tree-order beda_lint tests
+      - run: uv run function-verb-names beda_lint tests

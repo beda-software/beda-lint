@@ -262,6 +262,14 @@ def test_main__writes_baseline_keys_relative_to_the_working_directory(
     assert (tmp_path / "baseline.txt").read_text() == "pkg/mod.py::_helper\n"
 
 
+def test_main__skips_a_finding_with_a_noqa_comment_for_its_code(tmp_path: Path) -> None:
+    source = tmp_path / "sample.py"
+    source.write_text(
+        "def _helper():  # noqa: ORDER001\n    return 1\n\n\ndef root():\n    return _helper()\n"
+    )
+    assert main([str(source)]) == 0
+
+
 def test_main__rejects_update_baseline_without_a_baseline_file(tmp_path: Path) -> None:
     with pytest.raises(SystemExit):
         main([str(tmp_path), "--update-baseline"])

@@ -4,3 +4,9 @@
   entry: call-tree-order
   language: python
   types: [python]
+- id: function-verb-names
+  name: function-verb-names
+  description: Each Python function name starts with a verb; bool functions read as predicates.
+  entry: function-verb-names
+  language: python
+  types: [python]

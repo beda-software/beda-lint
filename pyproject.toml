@@ -3,11 +3,12 @@ name = "beda-lint"
 version = "0.1.0"
 description = "Custom lint checks for Beda Software projects"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = []
 
 [project.scripts]
 call-tree-order = "beda_lint.call_tree_order:main"
+function-verb-names = "beda_lint.function_verb_names:main"
 
 [dependency-groups]
 dev = ["mypy", "pytest", "ruff"]
@@ -17,8 +18,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 line-length = 100
+extend-exclude = ["examples"]
 
 [tool.ruff.lint]
 select = ["I", "E", "F", "N", "B", "C4", "PT", "UP", "RET", "RUF", "SIM", "PL", "ANN"]
