@@ -6,6 +6,7 @@ import pytest
 
 from beda_lint.function_verb_names import (
     PREDICATE_PREFIXES,
+    ConfigError,
     NamingConfig,
     check_function_names,
     fetch_config,
@@ -44,12 +45,12 @@ def test_check_function_names__accepts_a_name_starting_with_a_verb() -> None:
 
 
 def test_check_function_names__flags_a_name_starting_with_a_noun() -> None:
-    assert check_source("def patient_data(): ...") == [("NAME001", "patient_data")]
+    assert check_source("def patient_data(): ...") == [("BVN001", "patient_data")]
 
 
 @pytest.mark.parametrize("name", ["records", "updates_for_patient", "Total"])
 def test_check_function_names__flags_plural_and_capitalized_nouns(name: str) -> None:
-    assert check_source(f"def {name}(): ...") == [("NAME001", name)]
+    assert check_source(f"def {name}(): ...") == [("BVN001", name)]
 
 
 def test_check_function_names__names_a_method_with_its_class() -> None:
@@ -57,7 +58,7 @@ def test_check_function_names__names_a_method_with_its_class() -> None:
         class Cart:
             def total(self): ...
     """
-    assert check_source(source) == [("NAME001", "Cart.total")]
+    assert check_source(source) == [("BVN001", "Cart.total")]
 
 
 def test_check_function_names__checks_nested_and_async_functions() -> None:
@@ -65,7 +66,7 @@ def test_check_function_names__checks_nested_and_async_functions() -> None:
         async def fetch_all():
             def inner(): ...
     """
-    assert check_source(source) == [("NAME001", "fetch_all.inner")]
+    assert check_source(source) == [("BVN001", "fetch_all.inner")]
 
 
 def test_check_function_names__checks_functions_inside_if_blocks() -> None:
@@ -73,7 +74,7 @@ def test_check_function_names__checks_functions_inside_if_blocks() -> None:
         if True:
             def helper(): ...
     """
-    assert check_source(source) == [("NAME001", "helper")]
+    assert check_source(source) == [("BVN001", "helper")]
 
 
 @pytest.mark.parametrize(
@@ -106,7 +107,7 @@ def test_check_function_names__accepts_a_predicate_name_for_a_bool_function(sour
 def test_check_function_names__flags_a_bool_function_without_a_predicate_name(
     source: str,
 ) -> None:
-    assert [code for code, _ in check_source(source)] == ["NAME002"]
+    assert [code for code, _ in check_source(source)] == ["BVN002"]
 
 
 def test_check_function_names__accepts_a_predicate_name_without_a_bool_annotation() -> None:
@@ -131,7 +132,7 @@ def test_check_function_names__skips_a_string_annotation_that_is_not_valid_pytho
 )
 def test_check_function_names__infers_a_bool_return_without_an_annotation(body: str) -> None:
     source = f"def check_task(task):\n    {body}\n"
-    assert check_source(source) == [("NAME002", "check_task")]
+    assert check_source(source) == [("BVN002", "check_task")]
 
 
 @pytest.mark.parametrize(
@@ -190,7 +191,7 @@ def test_check_function_names__skips_ignored_decorators_and_patterns() -> None:
 
         def patient_data(): ...
     """
-    assert check_source(source, config) == [("NAME001", "patient_data")]
+    assert check_source(source, config) == [("BVN001", "patient_data")]
 
 
 def test_check_function_names__exempts_aiohttp_lifecycle_hooks_registered_in_the_module() -> None:
@@ -213,17 +214,17 @@ def test_check_function_names__exempts_aiohttp_lifecycle_hooks_registered_in_the
             app.on_startup.append(warmup)
             app.on_startup += [heartbeat]
     """
-    assert check_source(source) == [("NAME001", "settings")]
+    assert check_source(source) == [("BVN001", "settings")]
 
 
 def test_main__skips_a_finding_with_a_noqa_comment_for_its_code(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / "mod.py").write_text(
-        "def patient_data(): ...  # noqa: NAME001\n"
-        "def invoice_total(): ...  # noqa: E501, NAME001 legacy name\n"
-        "def order_total(): ...  # noqa: ORDER001\n"
-        "def cart_total(): ...  # noqa: E501 see NAME001\n"
+        "def patient_data(): ...  # noqa: BVN001\n"
+        "def invoice_total(): ...  # noqa: E501, BVN001 legacy name\n"
+        "def order_total(): ...  # noqa: BCT001\n"
+        "def cart_total(): ...  # noqa: E501 see BVN001\n"
     )
     monkeypatch.chdir(tmp_path)
     exit_code = main(["mod.py"])
@@ -270,7 +271,7 @@ def test_fetch_config__rejects_an_unknown_key_a_non_list_value_or_a_non_table(
 ) -> None:
     pyproject = tmp_path / "pyproject.toml"
     pyproject.write_text(pyproject_text)
-    with pytest.raises(SystemExit):
+    with pytest.raises(ConfigError):
         fetch_config(pyproject)
 
 
@@ -285,7 +286,7 @@ def test_main__reads_the_config_from_the_working_directory(
     exit_code = main(["mod.py"])
     assert exit_code == 1
     assert capsys.readouterr().out == (
-        "mod.py:2: NAME001 `patient_data` does not start with a verb; name it for what it does "
+        "mod.py:2: BVN001 `patient_data` does not start with a verb; name it for what it does "
         "(`fetch_`, `build_`, ...) or add `patient` to extra-verbs\n"
     )
 

@@ -66,5 +66,5 @@ app.cleanup_ctx.append(database)
 
 
 # A deliberate exception is suppressed on its `def` line.
-def dt(value: str) -> datetime:  # noqa: NAME001
+def dt(value: str) -> datetime:  # noqa: BVN001
     return datetime.fromisoformat(value)

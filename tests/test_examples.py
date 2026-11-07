@@ -1,3 +1,5 @@
+import subprocess
+import sys
 import tomllib
 from functools import partial
 from pathlib import Path
@@ -27,15 +29,15 @@ CHECKS: dict[str, CheckTree] = {
     "function_verb_names": partial(check_function_names, config=DEFAULT_NAMING_CONFIG),
 }
 EXPECTED_BAD_FINDINGS = {
-    "call_tree_order": [("ORDER001", "_format_invoice"), ("ORDER001", "_render")],
+    "call_tree_order": [("BCT001", "_format_invoice"), ("BCT001", "_render")],
     "function_verb_names": [
-        ("NAME001", "patient_data"),
-        ("NAME001", "invoice_total"),
-        ("NAME001", "records"),
-        ("NAME001", "chat_to_dict"),
-        ("NAME002", "check_paid"),
-        ("NAME002", "record_satisfier"),
-        ("NAME002", "validate_token"),
+        ("BVN001", "patient_data"),
+        ("BVN001", "invoice_total"),
+        ("BVN001", "records"),
+        ("BVN001", "chat_to_dict"),
+        ("BVN002", "check_paid"),
+        ("BVN002", "record_satisfier"),
+        ("BVN002", "validate_token"),
     ],
 }
 
@@ -57,6 +59,20 @@ def test_examples__every_check_has_an_examples_folder() -> None:
     assert folders == check_names == set(CHECKS)
 
 
+@pytest.mark.parametrize("file_name", ["good.py", "bad.py"])
+@pytest.mark.parametrize("check_name", CHECKS)
+def test_flake8__reports_the_same_codes_as_the_check(check_name: str, file_name: str) -> None:
+    expected = [code for code, _ in run_example(check_name, file_name)]
+    assert run_flake8(EXAMPLES / check_name / file_name) == expected
+
+
 def run_example(check_name: str, file_name: str) -> list[tuple[str, str]]:
     findings = check_file(EXAMPLES / check_name / file_name, CHECKS[check_name])
     return [(finding.code, finding.symbol) for finding in findings]
+
+
+def run_flake8(path: Path) -> list[str]:
+    command = [sys.executable, "-m", "flake8", "--select=BCT,BVN", "--format=%(code)s", str(path)]
+    result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
+    assert result.stderr == ""
+    return result.stdout.split()

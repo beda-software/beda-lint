@@ -10,7 +10,7 @@ from beda_lint.call_tree_order import check_call_tree_order, main
 def test_check_call_tree_order__flags_a_helper_defined_above_its_only_caller() -> None:
     tree = ast.parse("def _helper():\n    return 1\n\n\ndef root():\n    return _helper()\n")
     findings = check_call_tree_order(tree, Path("f.py"))
-    assert [(f.code, f.line) for f in findings] == [("ORDER001", 1)]
+    assert [(f.code, f.line) for f in findings] == [("BCT001", 1)]
 
 
 def test_check_call_tree_order__accepts_a_helper_defined_below_its_caller() -> None:
@@ -225,7 +225,7 @@ def test_main__exits_non_zero_and_prints_findings_when_a_file_has_violations(
     source.write_text("def _helper():\n    return 1\n\n\ndef root():\n    return _helper()\n")
     exit_code = main([str(source)])
     assert exit_code == 1
-    assert f"{source}:1: ORDER001" in capsys.readouterr().out
+    assert f"{source}:1: BCT001" in capsys.readouterr().out
 
 
 def test_main__accepts_a_baselined_finding(tmp_path: Path) -> None:
@@ -265,7 +265,7 @@ def test_main__writes_baseline_keys_relative_to_the_working_directory(
 def test_main__skips_a_finding_with_a_noqa_comment_for_its_code(tmp_path: Path) -> None:
     source = tmp_path / "sample.py"
     source.write_text(
-        "def _helper():  # noqa: ORDER001\n    return 1\n\n\ndef root():\n    return _helper()\n"
+        "def _helper():  # noqa: BCT001\n    return 1\n\n\ndef root():\n    return _helper()\n"
     )
     assert main([str(source)]) == 0
 

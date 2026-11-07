@@ -1,4 +1,4 @@
-# ORDER001: the helper sits above its caller, so the reader meets details before the
+# BCT001: the helper sits above its caller, so the reader meets details before the
 # function that explains why they exist. Move `_format_invoice` below `build_invoice`.
 def _format_invoice(lines: list[str]) -> str:
     return "\n".join(lines)
@@ -8,7 +8,7 @@ def build_invoice(order: "Order") -> str:
     return _format_invoice(order.lines)
 
 
-# ORDER001: a helper shared by several callers goes below the last of them,
+# BCT001: a helper shared by several callers goes below the last of them,
 # here below `send_invoice`, not between the two callers.
 def print_invoice(order: "Order") -> None:
     print(_render(order))

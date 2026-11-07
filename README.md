@@ -6,8 +6,8 @@ Python 3.11+ (the checks read their config with `tomllib`); the checked code can
 
 | Hook / command | Language | What it checks | Style guide |
 | --- | --- | --- | --- |
-| `call-tree-order` | Python | Each function sits below its last caller (`ORDER001`) | [good](examples/call_tree_order/good.py) / [bad](examples/call_tree_order/bad.py) |
-| `function-verb-names` | Python | Function names start with a verb (`NAME001`); bool functions read as predicates (`NAME002`) | [good](examples/function_verb_names/good.py) / [bad](examples/function_verb_names/bad.py) |
+| `call-tree-order` | Python | Each function sits below its last caller (`BCT001`) | [good](examples/call_tree_order/good.py) / [bad](examples/call_tree_order/bad.py) |
+| `function-verb-names` | Python | Function names start with a verb (`BVN001`); bool functions read as predicates (`BVN002`) | [good](examples/function_verb_names/good.py) / [bad](examples/function_verb_names/bad.py) |
 
 Each rule's style guide is a pair of files under [`examples/`](examples): `good.py` passes, `bad.py` shows every
 finding with the fix in a comment. Tests run the checks on both, so the examples always match what the checks do.
@@ -19,7 +19,7 @@ first used, each helper's own helpers below it. The check flags any function or 
 calls it:
 
 ```
-app/orders.py:12: ORDER001 `_total` is defined above its caller `build_invoice` (line 30); move helpers below their last caller
+app/orders.py:12: BCT001 `_total` is defined above its caller `build_invoice` (line 30); move helpers below their last caller
 ```
 
 See the style guide: [good](examples/call_tree_order/good.py) / [bad](examples/call_tree_order/bad.py).
@@ -107,8 +107,8 @@ function returning `bool` answers a question about its argument, so its name rea
 promises an action it does not take.
 
 ```
-app/billing.py:12: NAME001 `invoice_total` does not start with a verb; name it for what it does (`fetch_`, `build_`, ...) or add `invoice` to extra-verbs
-app/billing.py:30: NAME002 `check_paid` returns bool, so name it as a statement about its argument: `is_`, `has_`, `should_`, `can_`, or a third-person verb such as `matches_`
+app/billing.py:12: BVN001 `invoice_total` does not start with a verb; name it for what it does (`fetch_`, `build_`, ...) or add `invoice` to extra-verbs
+app/billing.py:30: BVN002 `check_paid` returns bool, so name it as a statement about its argument: `is_`, `has_`, `should_`, `can_`, or a third-person verb such as `matches_`
 ```
 
 See the style guide: [good](examples/function_verb_names/good.py) / [bad](examples/function_verb_names/bad.py),
@@ -118,10 +118,10 @@ How a name is read:
 
 - The first word counts, after leading underscores, split on `_` or camelCase: `_fetch_x` → `fetch`, `setUp` → `set`,
   `Total` → `total`.
-- **NAME001**: the first word must be in the verb list — the built-in [`verbs.txt`](beda_lint/verbs.txt) plus
+- **BVN001**: the first word must be in the verb list — the built-in [`verbs.txt`](beda_lint/verbs.txt) plus
   `extra-verbs` — or a predicate prefix (`is_`, `has_`, ...). A third-person form (`matches_`, `records`) passes only
   on a bool function, so `records() -> list` is flagged.
-- **NAME002**: a function returns bool when it is annotated `-> bool`, `TypeGuard[...]` or `TypeIs[...]`, or — without
+- **BVN002**: a function returns bool when it is annotated `-> bool`, `TypeGuard[...]` or `TypeIs[...]`, or — without
   an annotation — when every `return` gives `True`/`False`, a comparison, `not …`, `and`/`or` of those, a call such
   as `isinstance`, `any`, `all`, `bool`, or a call to a predicate-named function (`self._is_valid()`). Its first word
   must be `is`, `are`, `has`, `have`, `can`, `should`, `does`, an `extra-predicate-prefixes` entry, or the
@@ -129,7 +129,7 @@ How a name is read:
 - Exempt: dunder methods, `main`, `@property` and its setter/getter/deleter, `@cached_property`, `@overload` stubs,
   `@pytest.fixture` functions, names matching `*_op` (Aidbox operations), and aiohttp lifecycle hooks registered in
   the same module — `app.cleanup_ctx.append(db)`, `app.on_startup += [warmup]` and the other app signals. A hook
-  registered from another module is not seen; list it in `ignore-patterns` or add `# noqa: NAME001`. `test_*` passes
+  registered from another module is not seen; list it in `ignore-patterns` or add `# noqa: BVN001`. `test_*` passes
   because `test` is a verb.
 
 ### Configuration
@@ -175,15 +175,30 @@ The baseline works as for `call-tree-order`: entries are `path::Class.function`,
 Every check honours `# noqa: CODE` on the line it reports — the `def` line, not a decorator line:
 
 ```python
-def dt(time_str: str) -> datetime:  # noqa: NAME001 — short on purpose, used in test tables
+def dt(time_str: str) -> datetime:  # noqa: BVN001 — short on purpose, used in test tables
 ```
 
-Several codes can share one comment with ruff's: `# noqa: E501, NAME001`. With ruff's `RUF100` (unused `noqa`)
+Several codes can share one comment with ruff's: `# noqa: E501, BVN001`. With ruff's `RUF100` (unused `noqa`)
 enabled, tell ruff these codes are external so it keeps them:
 
 ```toml
 [tool.ruff.lint]
-external = ["NAME", "ORDER"]
+external = ["BVN", "BCT"]
+```
+
+## Use with flake8 (errors in the editor)
+
+The checks are also flake8 plugins, so an editor running flake8 underlines findings as you type. Baselines are not
+supported there: use flake8's `per-file-ignores` for legacy files, and keep the commands above for pre-commit and CI.
+flake8 also honours a bare `# noqa` without codes, which the commands ignore.
+
+In VS Code, install the [Flake8 extension](https://marketplace.visualstudio.com/items?itemName=ms-python.flake8) and
+beda-lint into the project environment (`uv add --dev git+https://github.com/beda-software/beda-lint`), then limit
+flake8 to these codes so it does not duplicate ruff:
+
+```json
+// .vscode/settings.json
+{ "flake8.args": ["--select=BCT,BVN"] }
 ```
 
 ## Development
@@ -194,7 +209,8 @@ uv run pytest
 uv run ruff format --check . && uv run ruff check . && uv run mypy
 ```
 
-A new check goes in `beda_lint/<check>.py` with a `main()`, a `[project.scripts]` entry in `pyproject.toml`, a hook
+A new check goes in `beda_lint/<check>.py` with a `main()`, a `[project.scripts]` entry in `pyproject.toml`, a
+plugin class in `beda_lint/flake8_plugin.py` with its `flake8.extension` entry point, a hook
 in `.pre-commit-hooks.yaml`, tests in `tests/`, a style guide in `examples/<check>/good.py` and `bad.py` (registered
 in `tests/test_examples.py`, which fails until every script in `[project.scripts]` has a folder), and a row in the
 table above.
