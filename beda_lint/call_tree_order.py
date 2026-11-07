@@ -8,7 +8,7 @@ from pathlib import Path
 
 from beda_lint.cli import Finding, run_check
 
-CODE = "ORDER001"
+CODE = "BCT001"
 PROPERTY_DECORATORS = frozenset({"property", "cached_property", "setter", "getter", "deleter"})
 
 TopLevelFunc = ast.FunctionDef | ast.AsyncFunctionDef

@@ -13,8 +13,9 @@ from pathlib import Path
 
 from beda_lint.cli import Finding, run_check
 
-NOT_A_VERB = "NAME001"
-NOT_A_PREDICATE = "NAME002"
+NOT_A_VERB = "BVN001"
+NOT_A_PREDICATE = "BVN002"
+PYPROJECT = Path("pyproject.toml")
 CONFIG_TABLE = "function-verb-names"
 CONFIG_KEYS = frozenset(
     {"extra-verbs", "extra-predicate-prefixes", "ignore-decorators", "ignore-patterns"}
@@ -55,12 +56,20 @@ class NamingConfig:
     ignore_patterns: tuple[str, ...]
 
 
+class ConfigError(Exception):
+    pass
+
+
 def main(argv: Sequence[str] | None = None) -> int:
-    config = fetch_config(Path("pyproject.toml"))
+    try:
+        config = fetch_config()
+    except ConfigError as error:
+        sys.exit(str(error))
+
     return run_check(partial(check_function_names, config=config), __doc__, argv)
 
 
-def fetch_config(pyproject: Path) -> NamingConfig:
+def fetch_config(pyproject: Path = PYPROJECT) -> NamingConfig:
     """Built-in verbs and prefixes, extended by `[tool.beda-lint.function-verb-names]`."""
     table = _fetch_config_table(pyproject)
     return NamingConfig(
@@ -78,11 +87,13 @@ def _fetch_config_table(pyproject: Path) -> dict[str, object]:
     table = tomllib.loads(pyproject.read_text()).get("tool", {}).get("beda-lint", {})
     table = table.get(CONFIG_TABLE, {}) if isinstance(table, dict) else table
     if not isinstance(table, dict):
-        sys.exit(f"{pyproject}: [tool.beda-lint.{CONFIG_TABLE}] must be a table")
+        raise ConfigError(f"{pyproject}: [tool.beda-lint.{CONFIG_TABLE}] must be a table")
 
     unknown = set(table) - CONFIG_KEYS
     if unknown:
-        sys.exit(f"{pyproject}: unknown [tool.beda-lint.{CONFIG_TABLE}] keys: {sorted(unknown)}")
+        raise ConfigError(
+            f"{pyproject}: unknown [tool.beda-lint.{CONFIG_TABLE}] keys: {sorted(unknown)}"
+        )
 
     return table
 
@@ -99,7 +110,7 @@ def _get_words(table: dict[str, object], key: str) -> frozenset[str]:
 def _get_strings(table: dict[str, object], key: str) -> list[str]:
     value = table.get(key, [])
     if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-        sys.exit(f"[tool.beda-lint.{CONFIG_TABLE}] {key} must be a list of strings")
+        raise ConfigError(f"[tool.beda-lint.{CONFIG_TABLE}] {key} must be a list of strings")
 
     return value
 

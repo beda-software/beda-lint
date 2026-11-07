@@ -10,8 +10,17 @@ dependencies = []
 call-tree-order = "beda_lint.call_tree_order:main"
 function-verb-names = "beda_lint.function_verb_names:main"
 
+[project.entry-points."flake8.extension"]
+BCT = "beda_lint.flake8_plugin:CallTreeOrder"
+BVN = "beda_lint.flake8_plugin:FunctionVerbNames"
+
 [dependency-groups]
-dev = ["mypy", "pytest", "ruff"]
+dev = [
+    "flake8>=7.5.0",
+    "mypy",
+    "pytest",
+    "ruff",
+]
 
 [build-system]
 requires = ["hatchling"]
