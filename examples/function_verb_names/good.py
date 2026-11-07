@@ -1,3 +1,12 @@
+from collections.abc import AsyncIterator
+from datetime import datetime
+
+import pytest
+from aiohttp import web
+
+VALID_TOKENS = frozenset({"alpha", "beta"})
+
+
 # A function does something, so its name starts with what it does.
 def fetch_patient(patient_id: str) -> "Patient": ...
 
@@ -40,4 +49,22 @@ class Invoice:
     def __len__(self) -> int: ...
 
 
-def patient_terminate_op(operation, request): ...
+@pytest.fixture
+def patient() -> "Patient": ...
+
+
+def patient_terminate_op(operation: dict, request: dict) -> web.Response: ...
+
+
+# An aiohttp lifecycle hook registered in the same module is named for the resource it manages.
+async def database(app: web.Application) -> AsyncIterator[None]:
+    yield
+
+
+app = web.Application()
+app.cleanup_ctx.append(database)
+
+
+# A deliberate exception is suppressed on its `def` line.
+def dt(value: str) -> datetime:  # noqa: NAME001
+    return datetime.fromisoformat(value)

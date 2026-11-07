@@ -22,25 +22,7 @@ calls it:
 app/orders.py:12: ORDER001 `_total` is defined above its caller `build_invoice` (line 30); move helpers below their last caller
 ```
 
-```python
-# GOOD: entry point first, helpers below in first-use order
-def build_invoice(order):
-    return _format_invoice(_collect_lines(order))
-
-
-def _collect_lines(order): ...
-
-
-def _format_invoice(lines): ...
-
-
-# BAD: ORDER001, the helper sits above its caller
-def _format_invoice(lines): ...
-
-
-def build_invoice(order):
-    return _format_invoice(order.lines)
-```
+See the style guide: [good](examples/call_tree_order/good.py) / [bad](examples/call_tree_order/bad.py).
 
 What counts:
 
@@ -129,15 +111,8 @@ app/billing.py:12: NAME001 `invoice_total` does not start with a verb; name it f
 app/billing.py:30: NAME002 `check_paid` returns bool, so name it as a statement about its argument: `is_`, `has_`, `should_`, `can_`, or a third-person verb such as `matches_`
 ```
 
-| BAD | GOOD | Why |
-| --- | --- | --- |
-| `patient_data(patient_id)` | `fetch_patient(patient_id)` | NAME001: named after what it returns, not what it does |
-| `invoice_total(items)` | `calculate_invoice_total(items)` | NAME001: a noun phrase |
-| `records(patient)` | `fetch_records(patient)` | NAME001: a plural noun is not a third-person verb |
-| `chat_to_dict(chat)` | `convert_chat_to_dict(chat)` | NAME001: a conversion still needs its verb |
-| `check_paid(invoice) -> bool` | `is_paid(invoice) -> bool` | NAME002: reads as an action that may raise |
-| `record_satisfier(task) -> bool` | `has_satisfier(task) -> bool` | NAME002: an imperative promises an action it does not take |
-| `validate_token(token)` returning `token in VALID` | `is_valid_token(token)` | NAME002: no annotation, but it returns a comparison |
+See the style guide: [good](examples/function_verb_names/good.py) / [bad](examples/function_verb_names/bad.py),
+each bad name with its fix.
 
 How a name is read:
 
@@ -145,7 +120,7 @@ How a name is read:
   `Total` → `total`.
 - **NAME001**: the first word must be in the verb list — the built-in [`verbs.txt`](beda_lint/verbs.txt) plus
   `extra-verbs` — or a predicate prefix (`is_`, `has_`, ...). A third-person form (`matches_`, `records`) passes only
-  on a bool function, so a plural noun like `records()` is still flagged.
+  on a bool function, so `records() -> list` is flagged.
 - **NAME002**: a function returns bool when it is annotated `-> bool`, `TypeGuard[...]` or `TypeIs[...]`, or — without
   an annotation — when every `return` gives `True`/`False`, a comparison, `not …`, `and`/`or` of those, a call such
   as `isinstance`, `any`, `all`, `bool`, or a call to a predicate-named function (`self._is_valid()`). Its first word
@@ -221,4 +196,5 @@ uv run ruff format --check . && uv run ruff check . && uv run mypy
 
 A new check goes in `beda_lint/<check>.py` with a `main()`, a `[project.scripts]` entry in `pyproject.toml`, a hook
 in `.pre-commit-hooks.yaml`, tests in `tests/`, a style guide in `examples/<check>/good.py` and `bad.py` (registered
-in `tests/test_examples.py`, which fails until every folder in `examples/` is covered), and a row in the table above.
+in `tests/test_examples.py`, which fails until every script in `[project.scripts]` has a folder), and a row in the
+table above.
